@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import pe.edu.pucp.tasf.api.dto.AirportResponse;
 import pe.edu.pucp.tasf.api.dto.CollapseEventResponse;
 import pe.edu.pucp.tasf.api.dto.FlightResponse;
+import pe.edu.pucp.tasf.api.dto.PlanSimulationRequest;
 import pe.edu.pucp.tasf.api.dto.ShipmentResponse;
 import pe.edu.pucp.tasf.api.dto.SimulationMetricsResponse;
 import pe.edu.pucp.tasf.api.dto.SimulationStateResponse;
@@ -63,6 +64,22 @@ public class SimulationController {
     @GetMapping("/collapse-events")
     public List<CollapseEventResponse> getCollapseEvents() {
         return simulationDataService.getCollapseEvents();
+    }
+
+    @PostMapping("/plan")
+    public SimulationStateResponse plan(@org.springframework.web.bind.annotation.RequestBody(required = false) PlanSimulationRequest request) {
+        PlanSimulationRequest req = request == null
+            ? new PlanSimulationRequest(0, null, 1, 500, 2, 10_000L, 42L)
+            : request;
+        return simulationDataService.planWithTabuSearch(
+            req.startDay(),
+            req.startDate(),
+            req.days() == null ? 1 : Math.max(1, req.days()),
+            req.maxIterations() == null ? 500 : Math.max(1, req.maxIterations()),
+            req.maxHops() == null ? 2 : Math.max(1, req.maxHops()),
+            req.timeLimitMs() == null ? 10_000L : Math.max(1_000L, req.timeLimitMs()),
+            req.seed() == null ? 42L : req.seed()
+        );
     }
 
     @PostMapping("/start")

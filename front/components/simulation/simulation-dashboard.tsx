@@ -9,11 +9,9 @@ import {
   CollapseEvent,
   CollapseReason,
   CollapseSeverity,
-  initialAirports,
-  initialFlights,
   generateRandomShipments,
 } from "@/lib/simulation-data"
-import { airportsApi, flightsApi, shipmentsApi } from "@/lib/api"
+import { shipmentsApi, simulationApi } from "@/lib/api"
 import type { CreateShipmentDto } from "@/lib/api"
 import { WorldMap } from "./world-map"
 import { MetricsPanel } from "./metrics-panel"
@@ -22,6 +20,7 @@ import { ShipmentsTable } from "./shipments-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Plane, Calendar, MapPin, Truck, Search, PlaneTakeoff,
   ChevronLeft, ChevronRight, PanelLeftClose, PanelRightClose,
@@ -73,12 +72,16 @@ export function SimulationDashboard() {
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [dataSource, setDataSource] = useState<"api" | "mock">("mock")
+  const [planStartDay, setPlanStartDay] = useState(0)
+  const [plannedDays, setPlannedDays] = useState(1)
+  const [isPlanning, setIsPlanning] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
 
   // Estado de la simulación
   const [currentDay, setCurrentDay] = useState(1)
   const [currentHour, setCurrentHour] = useState(0)
-  const [airports, setAirports] = useState<Airport[]>(initialAirports)
-  const [flights, setFlights] = useState<Flight[]>(initialFlights)
+  const [airports, setAirports] = useState<Airport[]>([])
+  const [flights, setFlights] = useState<Flight[]>([])
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [activeFlights, setActiveFlights] = useState<
     { flight: Flight; progress: number; shipments: number }[]
@@ -107,9 +110,8 @@ export function SimulationDashboard() {
   const burstCounterRef = useRef(0)
   const currentDayRef = useRef(currentDay)
   const currentHourRef = useRef(currentHour)
-  // Días para los que ya se generaron envíos (evita duplicados)
   const generatedDaysRef = useRef<Set<number>>(new Set())
-
+  // Días para los que ya se generaron envíos (evita duplicados)
   useEffect(() => { shipmentsRef.current = shipments }, [shipments])
   useEffect(() => { airportsRef.current = airports }, [airports])
   useEffect(() => { collapseEventsRef.current = collapseEvents }, [collapseEvents])
@@ -262,8 +264,41 @@ export function SimulationDashboard() {
     }
   }, [])
 
+  const loadAlgorithmPlan = useCallback(async (startDay = planStartDay, days = plannedDays) => {
+    setIsPlanning(true)
+    setPlanError(null)
+    try {
+      const state = await simulationApi.plan({
+        startDay,
+        days,
+        maxIterations: 500,
+        maxHops: 2,
+        timeLimitMs: 10000,
+        seed: 42 + startDay,
+      })
+
+      setCurrentDay(state.day)
+      setCurrentHour(state.timeOfDay)
+      setAirports(state.airports)
+      setFlights(state.flights)
+      setShipments(state.shipments)
+      setMetrics(state.metrics)
+      setActiveFlights([])
+      setCollapseEvents([])
+      setCancelledFlightIds(new Set())
+      setDataSource("api")
+      setHasStarted(true)
+      setIsRunning(true)
+    } catch (error) {
+      setPlanError(error instanceof Error ? error.message : "No se pudo ejecutar el algoritmo")
+      setDataSource("mock")
+    } finally {
+      setIsPlanning(false)
+    }
+  }, [planStartDay, plannedDays])
+
   // Construye los DTOs con origen/destino aleatorios y llama al back para obtener rutas
-  const generateShipmentsForDay = useCallback(async (day: number) => {
+  const removeLegacyRandomGeneration = false && useCallback(async (day: number) => {
     if (generatedDaysRef.current.has(day)) return
     generatedDaysRef.current.add(day)
 
@@ -316,7 +351,7 @@ export function SimulationDashboard() {
 
     if (nextHour >= 24) {
       const nextDay = currentDayRef.current + 1
-      if (nextDay > config.totalDays) {
+      if (nextDay > plannedDays) {
         setIsRunning(false)
         return
       }
@@ -349,8 +384,7 @@ export function SimulationDashboard() {
         const progress = Math.min(elapsed / durationHours, 1)
         const shipmentsOnFlight = shipmentsRef.current.filter(
           (s) =>
-            s.status === "in-transit" &&
-            s.currentLocation === flight.origin &&
+            s.route.includes(flight.origin) &&
             s.route.includes(flight.destination)
         ).length
         return { flight, progress, shipments: shipmentsOnFlight }
@@ -424,29 +458,13 @@ export function SimulationDashboard() {
         return { ...airport, currentStorage: Math.min(totalBags, airport.storageCapacity * 2) }
       })
     })
-  }, [config.totalDays, flights])
+  }, [plannedDays, flights])
 
-  // Genera envíos para el día actual (via API con fallback local)
+  // Ejecuta Tabu Search en el backend y carga demandas reales desde el día inicial.
   useEffect(() => {
-    if (hasStarted) {
-      generateShipmentsForDay(currentDay)
-    }
-  }, [currentDay, hasStarted, generateShipmentsForDay])
-
-  // Carga aeropuertos y vuelos desde el backend; si falla, usa datos mock
-  useEffect(() => {
-    Promise.allSettled([airportsApi.getAll(), flightsApi.getAll()]).then(
-      ([airportsResult, flightsResult]) => {
-        if (airportsResult.status === "fulfilled") {
-          setAirports(airportsResult.value)
-          setDataSource("api")
-        }
-        if (flightsResult.status === "fulfilled") {
-          setFlights(flightsResult.value)
-          setDataSource("api")
-        }
-      }
-    )
+    loadAlgorithmPlan(0, 1)
+    // Solo se ejecuta al cargar; el botón "Ejecutar TS" relanza con los valores actuales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -502,7 +520,7 @@ export function SimulationDashboard() {
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>Día {currentDay} de {config.totalDays}</span>
+              <span>Día {currentDay} de {plannedDays}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <span className="font-mono">
@@ -519,14 +537,14 @@ export function SimulationDashboard() {
               className={
                 isRunning
                   ? "bg-status-green/20 text-status-green border-status-green/30"
-                  : currentDay >= config.totalDays
+                  : currentDay >= plannedDays
                   ? "bg-primary/20 text-primary border-primary/30"
                   : "bg-status-amber/20 text-status-amber border-status-amber/30"
               }
             >
               {isRunning
                 ? "En Ejecución"
-                : currentDay >= config.totalDays
+                : currentDay >= plannedDays
                 ? "Completado"
                 : "Pausado"}
             </Badge>
@@ -538,6 +556,11 @@ export function SimulationDashboard() {
               />
               {dataSource === "api" ? "API" : "Mock"}
             </Badge>
+            {isPlanning && (
+              <Badge variant="outline" className="text-xs">
+                Ejecutando TS...
+              </Badge>
+            )}
           </div>
         </div>
       </header>
@@ -578,6 +601,34 @@ export function SimulationDashboard() {
 
       {/* Action Buttons Bar */}
       <div className="mb-4 flex items-center gap-3">
+        <div className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1">
+          <span className="text-xs text-muted-foreground">Día inicio</span>
+          <Input
+            className="h-8 w-20"
+            type="number"
+            min={0}
+            value={planStartDay}
+            onChange={(event) => setPlanStartDay(Math.max(0, Number(event.target.value) || 0))}
+          />
+          <span className="text-xs text-muted-foreground">Días</span>
+          <Input
+            className="h-8 w-16"
+            type="number"
+            min={1}
+            max={5}
+            value={plannedDays}
+            onChange={(event) => setPlannedDays(Math.max(1, Number(event.target.value) || 1))}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPlanning}
+            onClick={() => loadAlgorithmPlan(planStartDay, plannedDays)}
+          >
+            Ejecutar TS
+          </Button>
+        </div>
+
         <InTransitDialog
           shipments={shipments}
           airports={airports}
@@ -631,6 +682,12 @@ export function SimulationDashboard() {
         </div>
       </div>
 
+      {planError && (
+        <div className="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {planError}
+        </div>
+      )}
+
       {/* Layout principal */}
       <div className="flex gap-4 h-[calc(100vh-180px)]">
         {/* Panel izquierdo - Métricas */}
@@ -654,7 +711,7 @@ export function SimulationDashboard() {
                 metrics={metrics}
                 airports={airports}
                 currentDay={currentDay}
-                totalDays={config.totalDays}
+                totalDays={plannedDays}
                 collapseEvents={collapseEvents}
               />
             </div>

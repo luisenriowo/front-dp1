@@ -280,7 +280,7 @@ public class EnviosDataLoader {
                     pe.edu.pucp.tasf.model.Continent.fromIcao(destIcao), 0);
 
             return new ShipmentRequest(
-                    "E" + id,                // ID visible del envío
+                    "E_" + originIcao + "_" + id, // ID único: los archivos pueden repetir secuencias
                     tmpOrigin,
                     tmpDest,
                     quantity,

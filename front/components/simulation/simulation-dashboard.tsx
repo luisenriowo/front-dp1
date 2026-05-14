@@ -322,21 +322,31 @@ export function SimulationDashboard() {
       }
       setCurrentDay(nextDay)
       setCurrentHour(0)
+      setActiveFlights([])
       return
     }
 
     setCurrentHour(nextHour)
 
-    // Vuelos activos (excluyendo cancelados)
+    const day = currentDayRef.current
+
+    // Vuelos activos: despegaron hoy y siguen en aire, o despegaron ayer cruzando medianoche
     const currentFlights = flights.filter((f) => {
-      const flightEnd = f.departureTime + f.duration * 24
-      return nextHour >= f.departureTime && nextHour < flightEnd
+      const durationHours = f.duration * 24
+      const flightEnd = f.departureTime + durationHours
+      if (nextHour >= f.departureTime && nextHour < flightEnd) return true
+      if (flightEnd > 24 && day > 1 && nextHour < flightEnd - 24) return true
+      return false
     })
 
     setActiveFlights(
       currentFlights.map((flight) => {
-        const elapsed = nextHour - flight.departureTime
-        const progress = Math.min(elapsed / (flight.duration * 24), 1)
+        const durationHours = flight.duration * 24
+        // Para vuelos que cruzaron medianoche, el tiempo transcurrido se ajusta sumando 24h
+        const elapsed = nextHour >= flight.departureTime
+          ? nextHour - flight.departureTime
+          : nextHour + 24 - flight.departureTime
+        const progress = Math.min(elapsed / durationHours, 1)
         const shipmentsOnFlight = shipmentsRef.current.filter(
           (s) =>
             s.status === "in-transit" &&
@@ -625,7 +635,7 @@ export function SimulationDashboard() {
       <div className="flex gap-4 h-[calc(100vh-180px)]">
         {/* Panel izquierdo - Métricas */}
         <div
-          className={`relative transition-all duration-300 ease-in-out ${
+          className={`relative h-full transition-all duration-300 ease-in-out ${
             leftPanelOpen ? "w-80" : "w-12"
           }`}
         >
@@ -701,7 +711,7 @@ export function SimulationDashboard() {
 
         {/* Panel derecho - Detalle de aeropuerto */}
         <div
-          className={`relative transition-all duration-300 ease-in-out ${
+          className={`relative h-full transition-all duration-300 ease-in-out ${
             rightPanelOpen ? "w-80" : "w-12"
           }`}
         >

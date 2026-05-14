@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Luis\\\\Documents\\\\proyectos\\\\front-dp1-1\\\\tasf-backend\\\\src\" -Recurse -Filter \"*.java\")",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object -ExpandProperty Count)"
+    ]
+  }
+}

@@ -98,7 +98,7 @@ function WorldMapComponent({
         {groundedFlights.map((flight) => {
           const origin = getAirportById(flight.origin)
           const dest = getAirportById(flight.destination)
-          if (!origin || !dest) return null
+          if (!origin?.coordinates || !dest?.coordinates) return null
           return (
             <Line
               key={`grounded-${flight.id}`}
@@ -117,7 +117,7 @@ function WorldMapComponent({
         {activeNonCancelled.map(({ flight }) => {
           const origin = getAirportById(flight.origin)
           const dest = getAirportById(flight.destination)
-          if (!origin || !dest) return null
+          if (!origin?.coordinates || !dest?.coordinates) return null
           return (
             <Line
               key={flight.id}
@@ -136,7 +136,7 @@ function WorldMapComponent({
         {activeCancelled.map(({ flight }) => {
           const origin = getAirportById(flight.origin)
           const dest = getAirportById(flight.destination)
-          if (!origin || !dest) return null
+          if (!origin?.coordinates || !dest?.coordinates) return null
           return (
             <Line
               key={`cancelled-active-${flight.id}`}
@@ -155,7 +155,7 @@ function WorldMapComponent({
         {activeNonCancelled.map(({ flight, progress, shipments }) => {
           const origin = getAirportById(flight.origin)
           const dest = getAirportById(flight.destination)
-          if (!origin || !dest) return null
+          if (!origin?.coordinates || !dest?.coordinates) return null
 
           const currentPos = getFlightPosition(origin.coordinates, dest.coordinates, progress)
           const angle = getFlightAngle(origin.coordinates, dest.coordinates)
@@ -185,7 +185,7 @@ function WorldMapComponent({
         })}
 
         {/* Aeropuertos */}
-        {airports.map((airport) => {
+        {airports.filter(a => a.coordinates).map((airport) => {
           const utilizationPercent = (airport.currentStorage / airport.storageCapacity) * 100
           const status = getStatusColor(Math.min(utilizationPercent, 100))
           const isSelected = selectedAirport === airport.id

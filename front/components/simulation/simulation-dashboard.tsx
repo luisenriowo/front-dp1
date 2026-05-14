@@ -58,6 +58,14 @@ const COLLAPSE_SEVERITY_LABELS: Record<CollapseSeverity, string> = {
   catastrophic: "Catastrófico",
 }
 
+const BACKEND_STATUS_MAP: Record<string, Shipment["status"]> = {
+  PENDING: "pending",
+  IN_TRANSIT: "in-transit",
+  DELIVERED: "delivered",
+  DELIVERED_LATE: "delayed",
+  NO_ROUTE: "pending",
+}
+
 export function SimulationDashboard() {
   const [config] = useState<SimulationConfig>(DEFAULT_CONFIG)
   const [isRunning, setIsRunning] = useState(false)
@@ -234,28 +242,22 @@ export function SimulationDashboard() {
   }, [])
 
   const calculateMetrics = useCallback((currentShipments: Shipment[]): SimulationMetrics => {
-    const delivered = currentShipments.filter((s) => s.status === "delivered")
-    const delayed = currentShipments.filter((s) => s.status === "delayed")
-    const inTransit = currentShipments.filter((s) => s.status === "in-transit")
-    const pending = currentShipments.filter((s) => s.status === "pending")
-
-    const totalDelivered = delivered.length + delayed.length
-    const avgTime =
-      totalDelivered > 0
-        ? [...delivered, ...delayed].reduce((acc, s) => {
-            const time =
-              (new Date().getTime() - s.createdAt.getTime()) / (1000 * 60 * 60 * 24)
-            return acc + time
-          }, 0) / totalDelivered
-        : 0
-
+    let deliveredOnTime = 0, deliveredLate = 0, inTransit = 0, pending = 0, totalDuration = 0
+    for (const s of currentShipments) {
+      const duration = (s.deadline.getTime() - s.createdAt.getTime()) / (1000 * 60 * 60 * 24)
+      if (s.status === "delivered") { deliveredOnTime++; totalDuration += duration }
+      else if (s.status === "delayed") { deliveredLate++; totalDuration += duration }
+      else if (s.status === "in-transit") { inTransit++ }
+      else { pending++ }
+    }
+    const totalDelivered = deliveredOnTime + deliveredLate
     return {
       totalShipments: currentShipments.length,
-      deliveredOnTime: delivered.length,
-      deliveredLate: delayed.length,
-      inTransit: inTransit.length,
-      pending: pending.length,
-      averageDeliveryTime: avgTime,
+      deliveredOnTime,
+      deliveredLate,
+      inTransit,
+      pending,
+      averageDeliveryTime: totalDelivered > 0 ? totalDuration / totalDelivered : 0,
       warehouseUtilization: {},
     }
   }, [])
@@ -290,11 +292,11 @@ export function SimulationDashboard() {
     try {
       const fromApi = await shipmentsApi.createBulk(dtos)
       if (fromApi.length > 0) {
-        // Normalizar fechas que vienen como string desde el backend
-        const normalized = fromApi.map((s) => ({
+        const normalized = fromApi.map((s: any) => ({
           ...s,
           createdAt: new Date(s.createdAt),
           deadline: new Date(s.deadline),
+          status: BACKEND_STATUS_MAP[String(s.status)] ?? "pending",
         }))
         setShipments((prev) => [...prev, ...normalized])
         setDataSource("api")

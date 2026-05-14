@@ -40,7 +40,7 @@ interface SimulationConfig {
 const DEFAULT_CONFIG: SimulationConfig = {
   totalDays: 5,
   shipmentsPerDay: 25,
-  simulationSpeed: 100,
+  simulationSpeed: 500,
 }
 
 const COLLAPSE_REASONS: CollapseReason[] = ["storm", "strike", "technical"]
@@ -312,112 +312,109 @@ export function SimulationDashboard() {
   }, [config.shipmentsPerDay])
 
   const processTick = useCallback(() => {
-    setCurrentHour((prevHour) => {
-      const nextHour = prevHour + 1
+    const nextHour = currentHourRef.current + 1
 
-      if (nextHour >= 24) {
-        setCurrentDay((prevDay) => {
-          const nextDay = prevDay + 1
-          if (nextDay > config.totalDays) {
-            setIsRunning(false)
-            return prevDay
-          }
-          return nextDay
-        })
-        return 0
+    if (nextHour >= 24) {
+      const nextDay = currentDayRef.current + 1
+      if (nextDay > config.totalDays) {
+        setIsRunning(false)
+        return
       }
+      setCurrentDay(nextDay)
+      setCurrentHour(0)
+      return
+    }
 
-      // Vuelos activos (excluyendo cancelados)
-      const currentFlights = flights.filter((f) => {
-        const flightEnd = f.departureTime + f.duration * 24
-        return nextHour >= f.departureTime && nextHour < flightEnd
+    setCurrentHour(nextHour)
+
+    // Vuelos activos (excluyendo cancelados)
+    const currentFlights = flights.filter((f) => {
+      const flightEnd = f.departureTime + f.duration * 24
+      return nextHour >= f.departureTime && nextHour < flightEnd
+    })
+
+    setActiveFlights(
+      currentFlights.map((flight) => {
+        const elapsed = nextHour - flight.departureTime
+        const progress = Math.min(elapsed / (flight.duration * 24), 1)
+        const shipmentsOnFlight = shipmentsRef.current.filter(
+          (s) =>
+            s.status === "in-transit" &&
+            s.currentLocation === flight.origin &&
+            s.route.includes(flight.destination)
+        ).length
+        return { flight, progress, shipments: shipmentsOnFlight }
       })
+    )
 
-      setActiveFlights(
-        currentFlights.map((flight) => {
-          const elapsed = nextHour - flight.departureTime
-          const progress = Math.min(elapsed / (flight.duration * 24), 1)
-          const shipmentsOnFlight = shipmentsRef.current.filter(
-            (s) =>
-              s.status === "in-transit" &&
-              s.currentLocation === flight.origin &&
-              s.route.includes(flight.destination)
-          ).length
-          return { flight, progress, shipments: shipmentsOnFlight }
-        })
-      )
+    // Procesar envíos (omitir vuelos cancelados)
+    setShipments((prevShipments) => {
+      return prevShipments.map((shipment) => {
+        if (shipment.status === "delivered" || shipment.status === "delayed") {
+          return shipment
+        }
 
-      // Procesar envíos (omitir vuelos cancelados)
-      setShipments((prevShipments) => {
-        return prevShipments.map((shipment) => {
-          if (shipment.status === "delivered" || shipment.status === "delayed") {
-            return shipment
-          }
+        const availableFlight = flights.find(
+          (f) =>
+            f.origin === shipment.currentLocation &&
+            shipment.route.includes(f.destination) &&
+            f.departureTime === nextHour &&
+            !cancelledFlightIdsRef.current.has(f.id)
+        )
 
-          const availableFlight = flights.find(
+        if (availableFlight && shipment.status === "pending") {
+          return { ...shipment, status: "in-transit" as const }
+        }
+
+        if (shipment.status === "in-transit") {
+          const currentFlight = flights.find(
             (f) =>
               f.origin === shipment.currentLocation &&
-              shipment.route.includes(f.destination) &&
-              f.departureTime === nextHour &&
-              !cancelledFlightIdsRef.current.has(f.id)
+              shipment.route.includes(f.destination)
           )
 
-          if (availableFlight && shipment.status === "pending") {
-            return { ...shipment, status: "in-transit" as const }
-          }
+          if (currentFlight) {
+            const arrivalHour = currentFlight.departureTime + currentFlight.duration * 24
+            if (nextHour >= arrivalHour) {
+              const newLocation = currentFlight.destination
 
-          if (shipment.status === "in-transit") {
-            const currentFlight = flights.find(
-              (f) =>
-                f.origin === shipment.currentLocation &&
-                shipment.route.includes(f.destination)
-            )
-
-            if (currentFlight) {
-              const arrivalHour = currentFlight.departureTime + currentFlight.duration * 24
-              if (nextHour >= arrivalHour) {
-                const newLocation = currentFlight.destination
-
-                if (newLocation === shipment.destination) {
-                  const currentDate = new Date(2026, 2, 31 + currentDayRef.current, nextHour)
-                  const isOnTime = currentDate <= shipment.deadline
-                  return {
-                    ...shipment,
-                    currentLocation: newLocation,
-                    status: isOnTime ? ("delivered" as const) : ("delayed" as const),
-                  }
-                }
-
+              if (newLocation === shipment.destination) {
+                const currentDate = new Date(2026, 2, 31 + currentDayRef.current, nextHour)
+                const isOnTime = currentDate <= shipment.deadline
                 return {
                   ...shipment,
                   currentLocation: newLocation,
-                  currentRouteIndex: shipment.currentRouteIndex + 1,
-                  status: "pending" as const,
+                  status: isOnTime ? ("delivered" as const) : ("delayed" as const),
                 }
+              }
+
+              return {
+                ...shipment,
+                currentLocation: newLocation,
+                currentRouteIndex: shipment.currentRouteIndex + 1,
+                status: "pending" as const,
               }
             }
           }
+        }
 
-          return shipment
-        })
+        return shipment
       })
-
-      // Actualizar almacenes (sin cap rígido para permitir overflow)
-      setAirports((prevAirports) => {
-        return prevAirports.map((airport) => {
-          const shipmentsAtAirport = shipmentsRef.current.filter(
-            (s) =>
-              s.currentLocation === airport.id &&
-              (s.status === "pending" || s.status === "in-transit")
-          )
-          const totalBags = shipmentsAtAirport.reduce((acc, s) => acc + s.quantity, 0)
-          return { ...airport, currentStorage: Math.min(totalBags, airport.storageCapacity * 2) }
-        })
-      })
-
-      return nextHour
     })
-  }, [config.totalDays, config.shipmentsPerDay, flights])
+
+    // Actualizar almacenes (sin cap rígido para permitir overflow)
+    setAirports((prevAirports) => {
+      return prevAirports.map((airport) => {
+        const shipmentsAtAirport = shipmentsRef.current.filter(
+          (s) =>
+            s.currentLocation === airport.id &&
+            (s.status === "pending" || s.status === "in-transit")
+        )
+        const totalBags = shipmentsAtAirport.reduce((acc, s) => acc + s.quantity, 0)
+        return { ...airport, currentStorage: Math.min(totalBags, airport.storageCapacity * 2) }
+      })
+    })
+  }, [config.totalDays, flights])
 
   // Genera envíos para el día actual (via API con fallback local)
   useEffect(() => {

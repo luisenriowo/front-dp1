@@ -105,8 +105,8 @@ function WorldMapComponent({
               from={origin.coordinates}
               to={dest.coordinates}
               stroke="#ef4444"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
+              strokeWidth={0.7}
+              strokeDasharray="3 3"
               strokeLinecap="round"
               strokeOpacity={0.45}
             />
@@ -124,8 +124,8 @@ function WorldMapComponent({
               from={origin.coordinates}
               to={dest.coordinates}
               stroke="#60a5fa"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
+              strokeWidth={0.7}
+              strokeDasharray="5 3"
               strokeLinecap="round"
               strokeOpacity={0.6}
             />
@@ -143,8 +143,8 @@ function WorldMapComponent({
               from={origin.coordinates}
               to={dest.coordinates}
               stroke="#f97316"
-              strokeWidth={1.5}
-              strokeDasharray="3 5"
+              strokeWidth={0.7}
+              strokeDasharray="3 4"
               strokeLinecap="round"
               strokeOpacity={0.5}
             />
@@ -162,7 +162,7 @@ function WorldMapComponent({
 
           return (
             <Marker key={`plane-${flight.id}`} coordinates={currentPos}>
-              <g transform={`rotate(${angle})`}>
+              <g transform={`rotate(${angle}) scale(0.55)`}>
                 <ellipse cx="0" cy="2" rx="10" ry="3.5" fill="rgba(0,0,0,0.3)" />
                 <path
                   d="M0,-15 C1.5,-13 2.5,-9 2.5,-5 L13,3 L13,5.5 L2.5,2 L2.5,8 L5.5,10 L5.5,12 L0,11 L-5.5,12 L-5.5,10 L-2.5,8 L-2.5,2 L-13,5.5 L-13,3 L-2.5,-5 C-2.5,-9 -1.5,-13 0,-15 Z"
@@ -211,19 +211,19 @@ function WorldMapComponent({
               {isCollapsing && (
                 <>
                   <circle
-                    r="26"
+                    r="16"
                     fill={`${collapseSeverityColor}18`}
                     stroke={collapseSeverityColor}
-                    strokeWidth={2.5}
+                    strokeWidth={1.5}
                     className="animate-ping"
                     style={{ animationDuration: "1.2s" }}
                   />
                   <circle
-                    r="20"
+                    r="12"
                     fill="transparent"
                     stroke={collapseSeverityColor}
-                    strokeWidth={1.5}
-                    strokeDasharray="5 3"
+                    strokeWidth={1}
+                    strokeDasharray="4 2"
                     className="animate-pulse"
                   />
                 </>
@@ -232,25 +232,25 @@ function WorldMapComponent({
               {/* Anillo de selección */}
               {isSelected && !isCollapsing && (
                 <circle
-                  r="18"
+                  r="11"
                   fill="transparent"
                   stroke="#ffffff"
-                  strokeWidth={2}
-                  strokeDasharray="4 2"
+                  strokeWidth={1.5}
+                  strokeDasharray="3 2"
                   className="animate-pulse"
                 />
               )}
 
               {/* Base del aeropuerto */}
               <circle
-                r={isSelected ? 14 : 12}
+                r={isSelected ? 8 : 7}
                 fill={isCollapsing ? `${collapseSeverityColor}30` : "#1e293b"}
                 stroke={isCollapsing ? collapseSeverityColor : statusColor}
-                strokeWidth={isCollapsing ? 2.5 : 2}
+                strokeWidth={isCollapsing ? 1.5 : 1.5}
               />
 
               {/* Icono de aeropuerto */}
-              <g transform={isSelected ? "scale(1.1)" : "scale(1)"}>
+              <g transform={isSelected ? "scale(0.65)" : "scale(0.6)"}>
                 <rect x="-9" y="-1.5" width="18" height="4" rx="1.5" fill={isCollapsing ? collapseSeverityColor : statusColor} />
                 <rect x="-1" y="-8" width="2" height="7" rx="0.5" fill="#ffffff" />
                 <rect x="-2.5" y="-10" width="5" height="2.5" rx="1" fill="#ffffff" />
@@ -260,27 +260,27 @@ function WorldMapComponent({
               </g>
 
               {/* Indicador de capacidad */}
-              <g transform="translate(10, -10)">
-                <circle r="5" fill={isCollapsing ? collapseSeverityColor : statusColor} stroke="#0a1628" strokeWidth={1} />
-                <text x="0" y="0.5" textAnchor="middle" dominantBaseline="central" fill="#ffffff" fontSize="6" fontWeight="bold">
+              <g transform="translate(6, -6)">
+                <circle r="3.5" fill={isCollapsing ? collapseSeverityColor : statusColor} stroke="#0a1628" strokeWidth={0.8} />
+                <text x="0" y="0.5" textAnchor="middle" dominantBaseline="central" fill="#ffffff" fontSize="4" fontWeight="bold">
                   {Math.min(Math.round(utilizationPercent), 99)}
                 </text>
               </g>
 
               {/* Ícono de advertencia de colapso */}
               {isCollapsing && (
-                <g transform="translate(-13, -13)">
-                  <circle r="6" fill={collapseSeverityColor} stroke="#0a1628" strokeWidth={1} />
-                  <text x="0" y="0.5" textAnchor="middle" dominantBaseline="central" fill="#ffffff" fontSize="8" fontWeight="bold">!</text>
+                <g transform="translate(-8, -8)">
+                  <circle r="4" fill={collapseSeverityColor} stroke="#0a1628" strokeWidth={0.8} />
+                  <text x="0" y="0.5" textAnchor="middle" dominantBaseline="central" fill="#ffffff" fontSize="6" fontWeight="bold">!</text>
                 </g>
               )}
 
               {/* Código del aeropuerto */}
               <text
                 textAnchor="middle"
-                y={isSelected ? 26 : 22}
+                y={isSelected ? 16 : 14}
                 fill={isCollapsing ? collapseSeverityColor : "#ffffff"}
-                fontSize={isSelected ? "11" : "10"}
+                fontSize={isSelected ? "8" : "7"}
                 fontWeight={isSelected || isCollapsing ? "bold" : "normal"}
                 fontFamily="monospace"
               >

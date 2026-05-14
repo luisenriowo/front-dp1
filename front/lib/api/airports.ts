@@ -1,8 +1,19 @@
 import { Airport } from "@/lib/simulation-data"
 import { apiClient } from "./client"
 
-function toAirport(raw: any): Airport {
-  return { ...raw, coordinates: [raw.longitude, raw.latitude] as [number, number] }
+function toContinent(raw: string): Airport["continent"] {
+  const value = String(raw).toUpperCase()
+  if (value === "AMERICA") return "America"
+  if (value === "EUROPE") return "Europe"
+  return "Asia"
+}
+
+export function toAirport(raw: any): Airport {
+  return {
+    ...raw,
+    continent: toContinent(raw.continent),
+    coordinates: [raw.longitude, raw.latitude] as [number, number],
+  }
 }
 
 export const airportsApi = {
